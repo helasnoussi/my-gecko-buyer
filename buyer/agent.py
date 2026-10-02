@@ -69,73 +69,115 @@ def read_menu(run: Run) -> None:
     )
     run.menu = Menu.from_list_stores(answer, run.context.store)
 
-
 def pin_intent(run: Run) -> None:
-    """TODO (project 02): pin what was asked, to disk, before any bytes exist.
+    """Pin what was asked, to disk, before any bytes exist.
 
     Leave `run.intent` (from `parse_intent`) and `run.intent_path` (from `pin`, written to
     `run.out / "intents"`). The runner checks the file is there and says the same thing.
     """
-    raise NotYetWritten("pin_intent", "buyer/agent.py: parse_intent, then pin it to disk")
+    run.intent = parse_intent(run.ask, run.menu, run.context)
+    run.intent_path = pin(run.intent, run.out / "intents")
 
 
 def prepare(run: Run) -> None:
-    """TODO (project 02): ask Gecko for the purchase, as unsigned bytes, exactly once.
+    """Ask Gecko for the purchase, as unsigned bytes, exactly once.
 
     Call `prepare_purchase` with the store, the product, the buyer and the network FROM
     THE PIN, never from the ask. Leave the raw answer on `run.answer` and
     `Prepared.from_answer(run.answer)` on `run.prepared`. If Gecko refuses, `from_answer`
     raises `GeckoRefused`: let it rise, the runner records it.
     """
-    raise NotYetWritten("prepare", "buyer/agent.py: call prepare_purchase with the pinned fields")
-
+    run.answer = run.gecko.call(
+        "prepare_purchase",
+        {
+            "store": run.intent.store,
+            "product": run.intent.product,
+            "quantity": run.intent.quantity,
+            "buyer": run.intent.buyer,
+            "mint": run.intent.mint,
+            "network": run.intent.network,
+        },
+    )
+    run.prepared = Prepared.from_answer(run.answer)
 
 def check(run: Run) -> None:
-    """TODO (project 02): compare the prepared purchase with the pin, field by field.
+    """Compare the prepared purchase with the pin, field by field.
 
     Leave the `Verdict` from `check_all` on `run.verdict`. Do not sign here.
     """
-    raise NotYetWritten("check", "buyer/agent.py: run check_all on the pin and the prepared bytes")
+    run.verdict = check_all(run.intent, run.prepared)
 
 
 def sign(run: Run) -> None:
-    """TODO (project 03): have the signer sign the exact prepared bytes, once.
+    """Have the signer sign the exact prepared bytes, once.
 
     `run.signer.sign(run.prepared)` returns the signed base64. Leave it on `run.signed`.
     The signer refuses by itself if the cluster, the budget or the blockhash is wrong.
     """
-    raise NotYetWritten("sign", "buyer/agent.py: sign the prepared bytes with run.signer")
+    run.signed = run.signer.sign(run.prepared)
 
 
 def verify(run: Run) -> None:
-    """TODO (project 03): ask Gecko whether the signed bytes ARE the bytes it prepared.
+    """Ask Gecko whether the signed bytes ARE the bytes it prepared.
 
     Call `verify_signed_transaction` with the signed transaction, the `binding` and
     `binding_strength` from the prepared answer, `last_valid_block_height`, and
     `rpc_url = run.chain.rpc_url`. Leave the answer on `run.verified`.
     """
-    raise NotYetWritten("verify", "buyer/agent.py: call verify_signed_transaction")
-
+    run.verified = run.gecko.call(
+        "verify_signed_transaction",
+        {
+            "transaction": run.signed,
+            "binding": run.prepared.binding,
+            "binding_strength": run.prepared.binding_strength,
+            "last_valid_block_height": run.prepared.last_valid_block_height,
+            "rpc_url": run.chain.rpc_url,
+        },
+    )
 
 def submit(run: Run) -> None:
-    """TODO (project 03): send the verified bytes, through Gecko, to the signer's own RPC.
+    """Send the verified bytes, through Gecko, to the signer's own RPC.
 
     Call `submit_transaction` with the signed transaction, the `binding`,
     `last_valid_block_height` and `rpc_url = run.chain.rpc_url`. Leave the answer on
-    `run.submitted`. Never call it twice for the same bytes: if it did not confirm, read
-    what it said first.
+    `run.submitted`. Never call it twice for the same bytes.
     """
-    raise NotYetWritten("submit", "buyer/agent.py: call submit_transaction")
+    answer = run.gecko.call(
+        "submit_transaction",
+        {
+            "signed_transaction": run.signed,
+            "binding": run.prepared.binding,
+            "last_valid_block_height": run.prepared.last_valid_block_height,
+            "rpc_url": run.chain.rpc_url,
+        },
+    )
+    if isinstance(answer, str):
+        run.submitted = {"signature": answer}
+    else:
+        run.submitted = answer
 
-
+        
 def write_the_receipt(run: Run) -> None:
-    """TODO (project 03): read the ledger again and reconcile it with the first read.
+    """Read the ledger again and reconcile it with the first read.
 
     `read_snapshot(...)` for the after-read, then `reconcile(...)` with `run.before`, and
-    leave the `Receipt` on `run.receipt`. The runner writes it to `receipts/`.
+    leave the `Receipt` on `run.receipt`.
     """
-    raise NotYetWritten("write_the_receipt", "buyer/agent.py: read the ledger and reconcile")
+    after = read_snapshot(run.chain, run.intent, run.prepared)
+    
+    # Normalisation : s'assurer que submitted est un dictionnaire
+    submitted_payload = run.submitted
+    if isinstance(submitted_payload, str):
+        submitted_payload = {"signature": submitted_payload}
 
+    run.receipt = reconcile(
+        run.intent,
+        run.prepared,
+        run.before,
+        after,
+        submitted_payload,
+        run.source,
+    )
 
 # ==========================================================================================
 # The runner. Not yours to change: it is what makes the order a fact.

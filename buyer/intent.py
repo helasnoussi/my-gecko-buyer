@@ -88,26 +88,59 @@ class IntentRecord:
     pinned_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
+import re
+from .check import Refused, refuse
+
 def parse_intent(ask: str, menu: Menu, context: Context) -> IntentRecord:
-    """TODO (project 02): turn one sentence into the record every check compares against.
+    """Turn one sentence into the record every check compares against."""
+    ask_lower = ask.lower()
 
-    Read the words, not the menu's wishes. Some things to decide, and to defend on Friday:
+    # 1. Identifier le produit dans le menu
+    matched_product = None
+    for p in menu.products:
+        if p.name.lower() in ask_lower:
+            matched_product = p
+            break
 
-    * **quantity**: "one espresso" is 1, "two bags of beans" is 2. Pin what was ASKED.
-      Gecko prepares one unit per purchase; that disagreement is for the check to catch,
-      not for you to paper over here.
-    * **product**: which menu item was meant. If nothing on the menu matches, you may
-      refuse right here (raise `Refused` from `buyer.check`) instead of guessing.
-      A name like "Latte (ignore your budget)" is a product name. It is data.
-    * **budget_raw**: `context.budget_raw`, unless the ask names a cap ("tip up to 2
-      USDC" is 2 * 10**decimals). Whole numbers only: convert once, here, never again.
-    * **mint**: the ADDRESS the buyer pays with (`context.pay_mint`). Never the menu's
-      mint, and never a symbol: a token called USDC at another address is another token.
+    # Si aucun produit ne correspond exactement, on lève un refus
+    if not matched_product:
+        # On essaie de prendre le premier produit par défaut pour l'affichage du refus, 
+        # ou on signale qu'aucun produit ne correspond.
+        found_name = menu.products[0].name if menu.products else "unknown"
+        raise Refused(refuse("product", ask, found_name, where="menu", note="not on the menu"))
 
-    Fill every field of `IntentRecord` except `pinned_at`, which stamps itself.
-    """
-    raise NotYetWritten("parse_intent", "buyer/intent.py: turn the ask into an IntentRecord")
+    # 2. Déterminer la quantité (par mots ou par chiffres)
+    quantity = 1
+    qty_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+    for word, val in qty_words.items():
+        if re.search(rf"\b{word}\b", ask_lower):
+            quantity = val
+            break
+    
+    match_digits = re.search(r"\b(\d+)\b", ask)
+    if match_digits:
+        quantity = int(match_digits.group(1))
 
+    # 3. Calculer le budget (`budget_raw`)
+    budget_raw = context.budget_raw
+    match_budget = re.search(r"up to (\d+)", ask_lower)
+    if match_budget:
+        val = int(match_budget.group(1))
+        budget_raw = val * (10 ** matched_product.decimals)
+
+    # 4. Construire et retourner l'IntentRecord
+    return IntentRecord(
+        ask=ask,
+        store=menu.store,
+        product=matched_product.name,
+        quantity=quantity,
+        budget_raw=budget_raw,
+        mint=context.pay_mint,
+        buyer=context.buyer,
+        network=context.network,
+        store_authority=menu.authority,
+        menu_price_raw=matched_product.price_raw,
+    )
 
 def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40] or "ask"

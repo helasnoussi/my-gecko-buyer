@@ -7,6 +7,7 @@ refusal; "price_raw: asked at most 2000000, prepared 3000000" is.
 Two checks are written as worked examples: `check_program` and `check_store`. The other
 five are yours. Until you write one it raises `NotYetWritten`, and `check_all` treats that
 as a refusal: an unwritten check never lets a signature through.
+
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+
+from solders.pubkey import Pubkey
 
 from . import letmebuy
 
@@ -101,44 +104,36 @@ def check_store(intent: IntentRecord, prepared: Prepared) -> FieldResult:
 
 
 # --- yours --------------------------------------------------------------------------------
-
-
 def check_product(intent: IntentRecord, prepared: Prepared) -> FieldResult:
-    """TODO: the product in the bytes is the product that was pinned.
-
-    Use case 2 ("one general-admission ticket") must refuse when the prepared purchase is
-    the VIP ticket. Decide how exact "the same product" is, and write it in your ADR.
-    """
-    raise NotYetWritten("check_product", "buyer/check.py: compare prepared.product with the pin")
+    """The product in the bytes is the product that was pinned."""
+    if prepared.product != intent.product:
+        return refuse("product", intent.product, prepared.product)
+    return agree("product", intent.product)
 
 
 def check_price(intent: IntentRecord, prepared: Prepared) -> FieldResult:
-    """TODO: the amount leaving the buyer is at or under the pinned budget.
-
-    Field name `price_raw`. Whole numbers of the smallest unit on both sides. Use case 4
-    ("tip up to 2 USDC") must refuse a 3 USDC tip and name both numbers. What should
-    happen when the simulation reports no amount at all (`prepared.price_raw is None`)?
-    """
-    raise NotYetWritten("check_price", "buyer/check.py: compare prepared.price_raw with the budget")
+    """The amount leaving the buyer is at or under the pinned budget."""
+    if prepared.price_raw is None or prepared.price_raw > intent.budget_raw:
+        found = prepared.price_raw if prepared.price_raw is not None else "no amount"
+        return refuse("price_raw", f"at most {intent.budget_raw}", found)
+    return agree("price_raw", prepared.price_raw)
 
 
 def check_mint(intent: IntentRecord, prepared: Prepared) -> FieldResult:
-    """TODO: the token paid is the pinned mint, compared as an ADDRESS.
-
-    Use case 3 ("module 3, paid in USDC") must refuse a token called USDC at another
-    address. There is no symbol anywhere in `Prepared`, on purpose.
-    """
-    raise NotYetWritten("check_mint", "buyer/check.py: compare prepared.mint with the pin")
+    """The token paid is the pinned mint, compared as an ADDRESS."""
+    if prepared.mint != intent.mint:
+        return refuse("mint", intent.mint, prepared.mint)
+    return agree("mint", intent.mint)
 
 
 def check_quantity(intent: IntentRecord, prepared: Prepared) -> FieldResult:
-    """TODO: the number of purchases in the bytes is the number asked for.
+    """The number of purchases in the bytes is the number asked for."""
+    if prepared.quantity != intent.quantity:
+        return refuse("quantity", intent.quantity, prepared.quantity)
+    return agree("quantity", intent.quantity)
 
-    `prepare_purchase` prepares one unit. Use case 5 ("two bags of beans") must refuse:
-    asked 2, prepared 1. Refusing is the honest answer; buying one is not what was asked.
-    """
-    raise NotYetWritten("check_quantity", "buyer/check.py: compare prepared.quantity with the pin")
 
+from solders.pubkey import Pubkey  # Assurez-vous que Pubkey est importé en haut de check.py si ce n'est pas déjà fait
 
 def check_destination(intent: IntentRecord, prepared: Prepared) -> FieldResult:
     """TODO: the money goes to the store's own token account for the pinned mint.
@@ -147,8 +142,10 @@ def check_destination(intent: IntentRecord, prepared: Prepared) -> FieldResult:
     you pinned (`intent.store_authority`) for the pinned mint. Derive it with
     `letmebuy.token_account(...)`; never copy it from Gecko's answer.
     """
-    raise NotYetWritten("check_destination", "buyer/check.py: derive and compare the destination")
-
+    expected = str(letmebuy.token_account(Pubkey.from_string(intent.store_authority), Pubkey.from_string(intent.mint)))
+    if prepared.destination != expected:
+        return refuse("destination", expected, prepared.destination)
+    return agree("destination", expected)
 
 #: The order is part of the design: cheap, structural checks first.
 CHECKS: tuple[Callable[[IntentRecord, Prepared], FieldResult], ...] = (

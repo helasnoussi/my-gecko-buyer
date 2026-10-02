@@ -1,5 +1,9 @@
 # Dev3Pack Gecko capstone: a buyer that pays, or says why not
 
+**My `my-gecko-buyer` agent securely navigates Solana devnet via Gecko by pinning intents before transaction preparation, performing strict field-level safety validation, and ensuring zero unauthorized signatures.**
+
+**Devnet Explorer Link:** [View transaction on Solana Explorer](https://explorer.solana.com/tx/4yc7jA8LAjpZc3FXyMBbaeYqJMRQmr5Dmwmhj5Nos7ZrmTzuhftMa76UR6M3UwMLVLXWMXpaXAhhorMieUoXBZzf?cluster=devnet)
+
 ![Python](https://img.shields.io/badge/python-3.11+-blue)
 ![uv](https://img.shields.io/badge/uv-managed-6e56cf)
 ![Solana](https://img.shields.io/badge/Solana-devnet-9945FF)
