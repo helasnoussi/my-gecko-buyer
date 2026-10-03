@@ -306,3 +306,6 @@ makes a reader trust the repository more, not less.
 | `python3 scripts/scan_secrets.py` | the key scan |
 | `uv run python projects/0N-*/check.py` | a day's local score |
 | `git pull upstream main` | the next day's project |
+
+## Deployment & Smoke Test
+- Roll back to the previous container image within 5 minutes.
